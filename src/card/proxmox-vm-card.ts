@@ -1,3 +1,5 @@
+import type { HomeAssistant } from "../ha/types";
+import { VmController } from "../ha/vm-controller";
 import { LitElement, css, html, nothing } from "lit";
 import {
   formatBytes,
@@ -12,20 +14,43 @@ import {
 } from "../proxmox/model";
 import { validateConfig, type VmCardConfig } from "./config";
 
-/** Presentation boundary. Future HA adapters supply normalized data; no discovery lives here. */
+/** Presentation boundary. HA adapters supply normalized data; no discovery lives here. */
 export class ProxmoxVmCard extends LitElement {
   static properties = {
     model: { attribute: false },
     loading: { type: Boolean },
     config: { attribute: false },
+    error: { attribute: false },
   };
   model: ProxmoxVmModel | undefined;
   loading = false;
   private config: VmCardConfig | undefined;
+  private error: string | undefined;
+  protected get usesHomeAssistant(): boolean {
+    return true;
+  }
+  private readonly live = new VmController((result) => {
+    this.loading = result.loading;
+    this.model = result.model;
+    this.error = result.error;
+  });
+  set hass(value: HomeAssistant) {
+    if (this.usesHomeAssistant) this.live.update(value);
+  }
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.usesHomeAssistant) this.live.connect();
+  }
+  override disconnectedCallback(): void {
+    this.live.disconnect();
+    super.disconnectedCallback();
+  }
 
   setConfig(config: VmCardConfig): void {
     validateConfig(config);
     this.config = { ...config };
+    if (this.usesHomeAssistant)
+      this.live.configure(config.device, config.entities);
   }
   getCardSize(): number {
     return this.config?.layout === "compact"
@@ -78,6 +103,12 @@ export class ProxmoxVmCard extends LitElement {
 
   protected render() {
     const layout = this.config?.layout ?? "standard";
+    if (this.error)
+      return html`<ha-card
+        ><div class="placeholder" role="alert">
+          ${this.error}<button @click=${() => this.live.retry()}>Retry</button>
+        </div></ha-card
+      >`;
     if (this.loading)
       return html`<ha-card
         ><div class="placeholder" role="status" aria-busy="true">
@@ -112,6 +143,8 @@ export class ProxmoxVmCard extends LitElement {
             ? "Uptime unavailable"
             : stateLabel
         : stateLabel;
+    const showMetrics =
+      model.state !== "stopped" && model.state !== "suspended";
     const actions = visibleActions(model.state, model.actions);
     const routine = actions.filter((action) => action.id !== "force-stop");
     const forceStop = actions.find((action) => action.id === "force-stop");
@@ -161,11 +194,16 @@ export class ProxmoxVmCard extends LitElement {
         </div>
       </header>
       ${model.state === "unavailable" ? html`<p class="notice" role="status">VM unavailable. Current readings cannot be retrieved.</p>` : nothing}
-      <div class="metrics">
-        ${this.metric("cpu", "CPU")}${this.metric("memory", "Memory")}${this.metric("disk", "Disk")}
-      </div>
       ${
-        metricFor(model, "networkRx") || metricFor(model, "networkTx")
+        showMetrics
+          ? html`<div class="metrics">
+              ${this.metric("cpu", "CPU")}${this.metric("memory", "Memory")}${this.metric("disk", "Disk")}
+            </div>`
+          : nothing
+      }
+      ${
+        showMetrics &&
+        (metricFor(model, "networkRx") || metricFor(model, "networkTx"))
           ? html`<section class="network">
               <h3>Network <span>· cumulative totals</span></h3>
               <div class="network-values">
@@ -387,9 +425,18 @@ export class ProxmoxVmCard extends LitElement {
     }
     .actions {
       display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
+      flex-wrap: nowrap;
+      gap: 6px;
       align-items: center;
+    }
+    .actions > button {
+      flex: 1 1 0;
+      padding-inline: 6px;
+      white-space: nowrap;
+    }
+    .actions summary {
+      padding-inline: 8px;
+      white-space: nowrap;
     }
     button,
     summary {
@@ -420,7 +467,7 @@ export class ProxmoxVmCard extends LitElement {
     .overflow {
       position: relative;
       flex: 0 0 auto;
-      margin-left: auto;
+      margin-left: 0;
     }
     .overflow[open] {
       z-index: 2;

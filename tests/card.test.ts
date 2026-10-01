@@ -15,6 +15,22 @@ async function card(fixture = "Running healthy") {
   return element;
 }
 describe("card presentation", () => {
+  it.each(["Stopped", "Suspended"])(
+    "collapses telemetry for %s VMs and restores it when running",
+    async (fixture) => {
+      const element = await card(fixture);
+      expect(element.shadowRoot!.querySelector(".metrics")).toBeNull();
+      expect(element.shadowRoot!.querySelector(".network")).toBeNull();
+      expect(element.shadowRoot!.querySelector("header")).not.toBeNull();
+      expect(
+        element.shadowRoot!.querySelector("footer")?.textContent,
+      ).toContain(fixture === "Stopped" ? "Start" : "Resume");
+      element.model = fixtures["Running healthy"];
+      await element.updateComplete;
+      expect(element.shadowRoot!.querySelector(".metrics")).not.toBeNull();
+      expect(element.shadowRoot!.querySelector(".network")).not.toBeNull();
+    },
+  );
   it("distinguishes missing uptime from temporarily unavailable uptime", async () => {
     const element = await card();
     const model = element.model!;

@@ -1,8 +1,10 @@
+import type { EntityOverrides } from "../proxmox/official-adapter";
 export type Layout = "compact" | "standard" | "detailed";
 export interface VmCardConfig {
   type: "custom:proxmox-vm-card";
   device: string;
   layout?: Layout;
+  entities?: EntityOverrides;
   progress_bars?: boolean | Partial<Record<"cpu" | "memory" | "disk", boolean>>;
   memory_percentage?: boolean;
   disk_percentage?: boolean;
@@ -34,6 +36,32 @@ export function validateConfig(config: VmCardConfig): void {
     (typeof config.icon !== "string" || !config.icon.startsWith("mdi:"))
   )
     throw new Error("Icon must use an mdi: name.");
+  if (
+    config.entities !== undefined &&
+    (!config.entities ||
+      typeof config.entities !== "object" ||
+      Array.isArray(config.entities) ||
+      Object.entries(config.entities).some(
+        ([key, value]) =>
+          ![
+            "cpu",
+            "memory",
+            "memoryTotal",
+            "memoryPercentage",
+            "disk",
+            "diskTotal",
+            "networkRx",
+            "networkTx",
+            "uptime",
+            "status",
+          ].includes(key) ||
+          typeof value !== "string" ||
+          !value.startsWith("sensor."),
+      ))
+  )
+    throw new Error(
+      "Entity overrides must map supported roles to sensor entity IDs.",
+    );
   const bars = config.progress_bars;
   if (bars !== undefined && typeof bars !== "boolean") {
     if (
