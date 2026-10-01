@@ -2,7 +2,7 @@
 
 A polished set of Lit/TypeScript infrastructure cards. The first component is `custom:proxmox-vm-card`.
 
-**Early development:** live readings now come from the official Home Assistant Proxmox VE integration through device and entity registries. Lifecycle buttons remain disabled. This is not a release or a HACS installation guide.
+**Early development:** live readings now come from the official Home Assistant Proxmox VE integration through device and entity registries. Lifecycle buttons invoke official integration button entities through HA. Shutdown, reboot, suspend, and Force Stop require confirmation; Start and Resume execute directly. This is not a release or a HACS installation guide.
 
 ## Development
 
@@ -49,11 +49,11 @@ Appearance fields: `layout` (`compact`, `standard`, default, or `detailed`), `pr
 
 Stopped and suspended VMs collapse CPU, memory, disk, and network sections entirely; telemetry returns when the VM runs again. Unavailable running readings retain their placeholders.
 
-Network values are decimal SI cumulative totals, never rates. Running status displays uptime with an accessible “Running” label; the other states have explicit text. Force Stop is separated inside a native keyboard-accessible overflow disclosure. All lifecycle controls are inert and labeled as previews.
+Network values are decimal SI cumulative totals, never rates. Running status displays uptime with an accessible “Running” label; the other states have explicit text. Force Stop is separated inside a native keyboard-accessible overflow disclosure. Live lifecycle controls display pending, accepted, or error feedback; the fixture harness remains inert.
 
 ## Deferred
 
-HA lifecycle invocation and confirmations, visual editor and authorized entity enabling, HACS/release packaging. No direct Proxmox communication, cloud calls, or telemetry. 
+Configurable confirmations, visual editor and authorized entity enabling, HACS/release packaging. No direct Proxmox communication, cloud calls, or telemetry. 
 
 ## Devcontainer and Kubernetes bastion
 
@@ -81,7 +81,7 @@ Then run `kubectl get pods --all-namespaces` inside the devcontainer to locate H
 
 ### Fixture dashboard in Home Assistant
 
-`npm run build:ha-preview` creates **`dist-dev/proxmox-vm-test-card.js`**, a separate development-only resource. It registers `custom:proxmox-vm-test-card`, supplying fixtures to the unchanged production renderer. `dev/ha-test-dashboard.yaml` contains compact, standard, and detailed views with all fixture scenarios. The fixture tag stays isolated from live discovery. The same development bundle also registers `custom:proxmox-vm-live-test-card`, a live adapter wrapper for testing alongside an already installed production card. Neither tag invokes lifecycle actions. It is excluded from the production build.
+`npm run build:ha-preview` creates **`dist-dev/proxmox-vm-test-card.js`**, a separate development-only resource. It registers `custom:proxmox-vm-test-card`, supplying fixtures to the unchanged production renderer. `dev/ha-test-dashboard.yaml` contains compact, standard, and detailed views with all fixture scenarios. The fixture tag stays isolated from live discovery. The same development bundle also registers `custom:proxmox-vm-live-test-card`, a live adapter wrapper for testing alongside an already installed production card. The live tag invokes lifecycle actions; the fixture tag stays inert. It is excluded from the production build.
 
 For this test resource, copy the bundle to `/config/www/proxmox-cards-test/proxmox-vm-test-card.js`, register `/local/proxmox-cards-test/proxmox-vm-test-card.js` as a JavaScript module in HA dashboard resources, and paste the test dashboard YAML into a separate dashboard's raw configuration editor.
 
@@ -101,4 +101,16 @@ entities:
   cpu: sensor.your_explicit_cpu_entity
 ```
 
-The integration's `pause` button represents RAM suspension; `hibernate` is not mapped to Suspend. These bindings currently describe capability only. All lifecycle controls remain inert.
+The integration's `pause` button represents RAM suspension; `hibernate` is not mapped to Suspend. These bindings currently describe capability only. The live controller revalidates device, VM state, and button availability before calling HA’s `button.press` service. It blocks duplicate clicks, surfaces permission failures, and waits for HA state updates rather than optimistically changing VM status.
+
+### Local HA paused-status fix
+
+`tools/ha-proxmox-paused-status.py` is a reversible installer for a local override of HA's bundled official `proxmoxve` integration. Run it with `python ... --install` inside the HA container. It retains the integration's domain, entities, and connection settings, fetches `/status/current` for each running VM on every integration poll, and maps QEMU `paused`/`suspended` to HA `suspended`. Failed status queries fail the refresh instead of publishing a misleading running state. This adds one API request per running VM per poll.
+
+The deployed override lives at `/config/custom_components/proxmoxve`, with the original source snapshot at `/config/proxmox-cards-patches/proxmoxve-bundled-before-paused-fix`. Restart HA to activate it. **Review or remove the override after HA upgrades**, since custom components take precedence over bundled updates. Roll back by moving the override out of `custom_components` and restarting HA; the bundled integration then loads again. The installer refuses to overwrite an existing override or patch an unexpected source layout.
+
+Run its isolated logic tests with `python3 tools/test_ha_proxmox_paused_status.py`. No card-side Proxmox connections or credentials are introduced.
+
+Accepted lifecycle request feedback clears when HA reports a different VM status or a reboot resets uptime, including when that update arrives before the service response. Other metric updates retain the waiting message.
+
+Set `show_action_status: false` to hide the footer's normal lifecycle and request feedback (default: `true`). Action errors always remain visible, labeled “Last occurred error,” regardless of this setting.

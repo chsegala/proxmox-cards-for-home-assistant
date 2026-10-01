@@ -8,7 +8,16 @@ export interface HaConnection {
 export interface HomeAssistant {
   states: Record<string, HaState>;
   connection: HaConnection;
-  callWS<T>(message: { type: string }): Promise<T>;
+  callWS<T>(
+    message:
+      | { type: string }
+      | {
+          type: "call_service";
+          domain: "button";
+          service: "press";
+          target: { entity_id: string };
+        },
+  ): Promise<T>;
 }
 export interface DeviceEntry {
   id: string;

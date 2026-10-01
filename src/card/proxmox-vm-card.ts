@@ -1,12 +1,17 @@
 import type { HomeAssistant } from "../ha/types";
-import { VmController } from "../ha/vm-controller";
+import { VmController, type ActionResult } from "../ha/vm-controller";
 import { LitElement, css, html, nothing } from "lit";
 import {
   formatBytes,
   formatPercentage,
   formatUptime,
 } from "../infrastructure/format";
-import { actionLabels, visibleActions } from "../infrastructure/model";
+import {
+  actionLabels,
+  defaultConfirmations,
+  visibleActions,
+  type LifecycleActionId,
+} from "../infrastructure/model";
 import {
   metricFor,
   type ProxmoxVmModel,
@@ -21,19 +26,61 @@ export class ProxmoxVmCard extends LitElement {
     loading: { type: Boolean },
     config: { attribute: false },
     error: { attribute: false },
+    actionResult: { attribute: false },
+    confirmation: { attribute: false },
   };
   model: ProxmoxVmModel | undefined;
   loading = false;
   private config: VmCardConfig | undefined;
   private error: string | undefined;
+  private actionResult: ActionResult = { pending: false };
+  private confirmation:
+    { id: LifecycleActionId; deviceId: string; name: string } | undefined;
+  private async requestAction(id: LifecycleActionId): Promise<void> {
+    if (
+      this.confirmation ||
+      !this.usesHomeAssistant ||
+      !this.model ||
+      !this.live.canPress(id)
+    )
+      return;
+    const deviceId = this.model.identity.deviceId;
+    const overflow = this.shadowRoot?.querySelector("details");
+    if (overflow) overflow.open = false;
+    if (defaultConfirmations[id]) {
+      this.confirmation = { id, deviceId, name: this.model.identity.name };
+      await this.updateComplete;
+      this.shadowRoot?.querySelector("dialog")?.showModal();
+    } else await this.live.press(id, deviceId);
+  }
+  private cancelAction(): void {
+    this.shadowRoot?.querySelector("dialog")?.close();
+    this.confirmation = undefined;
+  }
+  private async confirmAction(): Promise<void> {
+    const confirmation = this.confirmation;
+    this.cancelAction();
+    if (confirmation)
+      await this.live.press(confirmation.id, confirmation.deviceId);
+  }
   protected get usesHomeAssistant(): boolean {
     return true;
   }
-  private readonly live = new VmController((result) => {
-    this.loading = result.loading;
-    this.model = result.model;
-    this.error = result.error;
-  });
+  private readonly live = new VmController(
+    (result) => {
+      this.loading = result.loading;
+      this.model = result.model;
+      this.error = result.error;
+      if (
+        this.confirmation &&
+        result.model?.identity.deviceId !== this.confirmation.deviceId
+      )
+        this.cancelAction();
+    },
+    (result) => {
+      this.actionResult = result;
+    },
+  );
   set hass(value: HomeAssistant) {
     if (this.usesHomeAssistant) this.live.update(value);
   }
@@ -42,12 +89,14 @@ export class ProxmoxVmCard extends LitElement {
     if (this.usesHomeAssistant) this.live.connect();
   }
   override disconnectedCallback(): void {
+    this.cancelAction();
     this.live.disconnect();
     super.disconnectedCallback();
   }
 
   setConfig(config: VmCardConfig): void {
     validateConfig(config);
+    this.cancelAction();
     this.config = { ...config };
     if (this.usesHomeAssistant)
       this.live.configure(config.device, config.entities);
@@ -223,29 +272,84 @@ export class ProxmoxVmCard extends LitElement {
           : nothing
       }
       ${
-        actions.length
+        actions.length || this.actionResult.error
           ? html`<footer>
               <div class="actions">
-                ${routine.map((action) => html`<button disabled title="Lifecycle actions are not connected in this preview">${actionLabels[action.id]}</button>`)}${
+                ${routine.map((action) => html`<button ?disabled=${!this.usesHomeAssistant || this.actionResult.pending || !this.live.canPress(action.id)} title=${this.usesHomeAssistant ? actionLabels[action.id] : "Lifecycle actions are not connected in this preview"} @click=${() => this.requestAction(action.id)}>${actionLabels[action.id]}</button>`)}${
                   forceStop
                     ? html`<details class="overflow">
                         <summary aria-label="More lifecycle actions">⋮</summary>
                         <div class="danger-menu">
-                          <button disabled>Force Stop</button
-                          ><small>Destructive action · preview only</small>
+                          <button
+                            ?disabled=${!this.usesHomeAssistant || this.actionResult.pending || !this.live.canPress("force-stop")}
+                            @click=${() => this.requestAction("force-stop")}
+                          >
+                            Force Stop</button
+                          ><small
+                            >${this.usesHomeAssistant ? "Immediately stops the VM" : "Destructive action · preview only"}</small
+                          >
                         </div>
                       </details>`
                     : nothing
                 }
               </div>
-              <small class="preview">Lifecycle controls · preview only</small>
+              ${this.actionResult.error ? html`<small class="preview" role="alert">Last occurred error: ${this.actionResult.error}</small>` : this.config?.show_action_status === false ? nothing : this.usesHomeAssistant ? html`<small class="preview" role="status">${this.actionResult.message ?? "Lifecycle controls"}</small>` : html`<small class="preview">Lifecycle controls · preview only</small>`}
             </footer>`
+          : nothing
+      }
+      ${
+        this.confirmation
+          ? html`<dialog
+              @cancel=${() => this.cancelAction()}
+              aria-labelledby="action-title"
+              aria-describedby="action-description"
+            >
+              <h2 id="action-title">
+                ${actionLabels[this.confirmation.id]} ${this.confirmation.name}?
+              </h2>
+              <p id="action-description">
+                ${this.confirmation.id === "force-stop" ? "This immediately stops the VM without a graceful shutdown and may cause data loss." : this.confirmation.id === "shutdown" ? "This requests a graceful shutdown of the VM." : this.confirmation.id === "reboot" ? "This restarts the VM and interrupts its services." : "This suspends the VM in memory and pauses its services."}
+              </p>
+              <div class="confirmation-actions">
+                <button autofocus @click=${() => this.cancelAction()}>
+                  Cancel</button
+                ><button
+                  class=${this.confirmation.id === "force-stop" ? "danger" : ""}
+                  @click=${() => this.confirmAction()}
+                >
+                  ${actionLabels[this.confirmation.id]}
+                </button>
+              </div>
+            </dialog>`
           : nothing
       }
     </ha-card>`;
   }
 
   static styles = css`
+    dialog {
+      max-width: min(420px, calc(100vw - 64px));
+      border: 1px solid var(--divider-color, #dce3ea);
+      border-radius: 12px;
+      padding: 24px;
+      background: var(--ha-card-background, var(--card-background-color, #fff));
+      color: var(--primary-text-color, #182637);
+    }
+    dialog::backdrop {
+      background: #0006;
+    }
+    dialog p {
+      line-height: 1.5;
+    }
+    .confirmation-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .danger {
+      color: var(--error-color, #b64545);
+    }
+
     :host {
       display: block;
       min-width: 0;

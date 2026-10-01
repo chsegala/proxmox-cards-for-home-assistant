@@ -64,7 +64,7 @@ describe("card presentation", () => {
         ?.textContent,
     ).toBe("39%");
     expect(root.textContent).toContain("cumulative totals");
-    expect(root.querySelector("details button")?.textContent).toBe(
+    expect(root.querySelector("details button")?.textContent?.trim()).toBe(
       "Force Stop",
     );
     expect(root.querySelectorAll("button:disabled")).toHaveLength(4);

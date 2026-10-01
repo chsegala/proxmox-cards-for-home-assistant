@@ -9,6 +9,7 @@ export interface VmCardConfig {
   memory_percentage?: boolean;
   disk_percentage?: boolean;
   state_accent?: boolean;
+  show_action_status?: boolean;
   icon?: string;
 }
 export function validateConfig(config: VmCardConfig): void {
@@ -28,6 +29,7 @@ export function validateConfig(config: VmCardConfig): void {
     "memory_percentage",
     "disk_percentage",
     "state_accent",
+    "show_action_status",
   ] as const)
     if (config[key] !== undefined && typeof config[key] !== "boolean")
       throw new Error(`${key} must be a boolean.`);
