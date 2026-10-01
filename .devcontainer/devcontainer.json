@@ -1,0 +1,26 @@
+{
+  "name": "Proxmox Cards · Kubernetes bastion",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".",
+    "args": { "KUBECTL_VERSION": "v1.35.0" }
+  },
+  "remoteUser": "node",
+  "containerUser": "node",
+  "init": true,
+  "mounts": [
+    "source=proxmox-cards-node-modules,target=${containerWorkspaceFolder}/node_modules,type=volume",
+    "source=proxmox-cards-kubeconfig,target=/home/node/.kube,type=volume"
+  ],
+  "containerEnv": { "KUBECONFIG": "/home/node/.kube/config" },
+  "appPort": ["127.0.0.1:5174:5173"],
+  "portsAttributes": {
+    "5173": { "label": "VM card harness", "onAutoForward": "notify" }
+  },
+  "postCreateCommand": "sudo chown node:node node_modules /home/node/.kube && chmod 700 /home/node/.kube && npm ci",
+  "customizations": {
+    "vscode": {
+      "extensions": ["dbaeumer.vscode-eslint", "esbenp.prettier-vscode"]
+    }
+  }
+}

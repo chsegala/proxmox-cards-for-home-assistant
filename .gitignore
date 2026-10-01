@@ -7,3 +7,10 @@ coverage/
 .DS_Store
 .idea/
 .vscode/
+
+# Local Kubernetes credentials
+.kube/
+kubeconfig
+kubeconfig.*
+*.kubeconfig
+dist-dev/

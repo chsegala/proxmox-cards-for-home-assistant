@@ -1,0 +1,185 @@
+title: Proxmox Cards Test
+views:
+  - title: Compact
+    path: compact
+    cards:
+      - type: markdown
+        content: "## Compact · fixture preview\nDevelopment data only. Lifecycle controls are inert."
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Running healthy**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Running healthy
+            layout: compact
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Stopped**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Stopped
+            layout: compact
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Suspended**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Suspended
+            layout: compact
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**One unavailable metric**"
+          - type: custom:proxmox-vm-test-card
+            fixture: One unavailable metric
+            layout: compact
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Unavailable VM**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Unavailable VM
+            layout: compact
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Missing optional metrics**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Missing optional metrics
+            layout: compact
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Unknown state**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Unknown state
+            layout: compact
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Loading**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Loading
+            layout: compact
+  - title: Standard
+    path: standard
+    cards:
+      - type: markdown
+        content: "## Standard · fixture preview\nDevelopment data only. Lifecycle controls are inert."
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Running healthy**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Running healthy
+            layout: standard
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Stopped**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Stopped
+            layout: standard
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Suspended**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Suspended
+            layout: standard
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**One unavailable metric**"
+          - type: custom:proxmox-vm-test-card
+            fixture: One unavailable metric
+            layout: standard
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Unavailable VM**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Unavailable VM
+            layout: standard
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Missing optional metrics**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Missing optional metrics
+            layout: standard
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Unknown state**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Unknown state
+            layout: standard
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Loading**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Loading
+            layout: standard
+  - title: Detailed
+    path: detailed
+    cards:
+      - type: markdown
+        content: "## Detailed · fixture preview\nDevelopment data only. Lifecycle controls are inert."
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Running healthy**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Running healthy
+            layout: detailed
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Stopped**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Stopped
+            layout: detailed
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Suspended**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Suspended
+            layout: detailed
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**One unavailable metric**"
+          - type: custom:proxmox-vm-test-card
+            fixture: One unavailable metric
+            layout: detailed
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Unavailable VM**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Unavailable VM
+            layout: detailed
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Missing optional metrics**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Missing optional metrics
+            layout: detailed
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Unknown state**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Unknown state
+            layout: detailed
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "**Loading**"
+          - type: custom:proxmox-vm-test-card
+            fixture: Loading
+            layout: detailed
