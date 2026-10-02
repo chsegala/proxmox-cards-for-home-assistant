@@ -3,7 +3,7 @@ import {
   defaultConfirmations,
   type LifecycleActionId,
 } from "../infrastructure/model";
-import type { EntityOverrides } from "../proxmox/official-adapter";
+import { entityRoles, type EntityOverrides } from "../proxmox/official-adapter";
 export type Layout = "compact" | "standard" | "detailed";
 export interface VmCardConfig {
   type: "custom:proxmox-vm-card";
@@ -96,18 +96,7 @@ export function validateConfig(config: VmCardConfig, allowSetup = false): void {
       Array.isArray(config.entities) ||
       Object.entries(config.entities).some(
         ([key, value]) =>
-          ![
-            "cpu",
-            "memory",
-            "memoryTotal",
-            "memoryPercentage",
-            "disk",
-            "diskTotal",
-            "networkRx",
-            "networkTx",
-            "uptime",
-            "status",
-          ].includes(key) ||
+          !(entityRoles as readonly string[]).includes(key) ||
           typeof value !== "string" ||
           !value.startsWith("sensor."),
       ))

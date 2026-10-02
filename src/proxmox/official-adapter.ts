@@ -31,6 +31,7 @@ const buttonKeys: Record<LifecycleActionId, string> = {
   resume: "resume",
 };
 export type EntityRole = keyof typeof sensorKeys;
+export const entityRoles = Object.keys(sensorKeys) as EntityRole[];
 export type EntityOverrides = Partial<Record<EntityRole, string>>;
 export interface VmBinding {
   identity: VmIdentity;
@@ -102,7 +103,7 @@ export function discoverVm(
     return candidates[0];
   };
   const sensors: VmBinding["sensors"] = {};
-  for (const role of Object.keys(sensorKeys) as EntityRole[]) {
+  for (const role of entityRoles) {
     const entity = resolve(sensorKeys[role], "sensor", overrides[role]);
     if (entity) sensors[role] = entity;
   }

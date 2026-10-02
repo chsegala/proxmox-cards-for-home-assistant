@@ -32,9 +32,9 @@ export class VmController {
   private unsubscribe: (() => void)[] = [];
   private active = false;
   private actionPending = false;
+  private actionGeneration = 0;
   private awaitingState:
-    | { state: ProxmoxVmModel["state"]; uptime: number | null; reboot: boolean }
-    | undefined;
+    { id: LifecycleActionId; uptime: number | null } | undefined;
   constructor(
     private readonly publish: (result: VmResult) => void,
     private readonly publishAction: (result: ActionResult) => void = () => {},
@@ -67,11 +67,10 @@ export class VmController {
       });
       return;
     }
-    const generation = this.generation;
+    const generation = this.actionGeneration;
     const entity = this.binding.actions[id]!;
     const hass = this.hass!;
     const startingModel = normalizeVm(this.binding, hass.states);
-    const startingState = startingModel.state;
     const startingUptime = startingModel.metrics.uptime?.value ?? null;
     this.awaitingState = undefined;
     this.actionPending = true;
@@ -86,22 +85,14 @@ export class VmController {
         service: "press",
         target: { entity_id: entity.entity_id },
       });
-      if (this.active && generation === this.generation) {
+      if (this.active && generation === this.actionGeneration) {
         const currentModel =
           this.binding && this.hass
             ? normalizeVm(this.binding, this.hass.states)
             : undefined;
-        const uptimeReset =
-          id === "reboot" &&
-          startingUptime !== null &&
-          currentModel?.metrics.uptime?.value != null &&
-          currentModel.metrics.uptime.value < startingUptime;
-        if (currentModel?.state === startingState && !uptimeReset) {
-          this.awaitingState = {
-            state: startingState,
-            uptime: startingUptime,
-            reboot: id === "reboot",
-          };
+        const expected = { id, uptime: startingUptime };
+        if (!this.actionCompleted(expected, currentModel)) {
+          this.awaitingState = expected;
           this.publishAction({
             pending: false,
             message: `${actionLabels[id]} request accepted. Waiting for Home Assistant state updates.`,
@@ -109,7 +100,7 @@ export class VmController {
         } else this.publishAction({ pending: false });
       }
     } catch (error) {
-      if (this.active && generation === this.generation)
+      if (this.active && generation === this.actionGeneration)
         this.publishAction({
           pending: false,
           error:
@@ -122,10 +113,12 @@ export class VmController {
                 : "Home Assistant could not send the action. Check permissions and connectivity.",
         });
     } finally {
-      this.actionPending = false;
+      if (generation === this.actionGeneration) this.actionPending = false;
     }
   }
   configure(device: string, overrides: EntityOverrides = {}): void {
+    this.actionGeneration++;
+    this.actionPending = false;
     this.awaitingState = undefined;
     this.publishAction({ pending: false });
     this.device = device;
@@ -138,6 +131,10 @@ export class VmController {
   }
   disconnect(): void {
     this.active = false;
+    this.actionGeneration++;
+    this.actionPending = false;
+    this.awaitingState = undefined;
+    this.publishAction({ pending: false });
     this.generation++;
     this.binding = undefined;
     for (const unsubscribe of this.unsubscribe.splice(0)) unsubscribe();
@@ -148,26 +145,42 @@ export class VmController {
     if (changed) this.reload();
     else if (this.active && this.binding) {
       const model = normalizeVm(this.binding, hass.states);
-      if (
-        this.awaitingState !== undefined &&
-        (model.state !== this.awaitingState.state ||
-          (this.awaitingState.reboot &&
-            this.awaitingState.uptime !== null &&
-            model.metrics.uptime?.value != null &&
-            model.metrics.uptime.value < this.awaitingState.uptime))
-      ) {
-        this.awaitingState = undefined;
-        this.publishAction({ pending: false });
-      }
+      this.reconcileAction(model);
       this.publish({ loading: false, model, binding: this.binding });
+    }
+  }
+  private actionCompleted(
+    expected: { id: LifecycleActionId; uptime: number | null },
+    model: ProxmoxVmModel | undefined,
+  ): boolean {
+    if (!model) return false;
+    if (expected.id === "reboot")
+      return (
+        model.state === "stopped" ||
+        (model.state === "running" &&
+          expected.uptime !== null &&
+          model.metrics.uptime?.value != null &&
+          model.metrics.uptime.value < expected.uptime)
+      );
+    const targets = {
+      start: "running",
+      shutdown: "stopped",
+      "force-stop": "stopped",
+      suspend: "suspended",
+      resume: "running",
+    } as const;
+    return model.state === targets[expected.id];
+  }
+  private reconcileAction(model: ProxmoxVmModel): void {
+    if (this.awaitingState && this.actionCompleted(this.awaitingState, model)) {
+      this.awaitingState = undefined;
+      this.publishAction({ pending: false });
     }
   }
   retry(): void {
     this.reload();
   }
   private reload(): void {
-    this.awaitingState = undefined;
-    this.publishAction({ pending: this.actionPending });
     const generation = ++this.generation;
     this.binding = undefined;
     for (const unsubscribe of this.unsubscribe.splice(0)) unsubscribe();
@@ -208,11 +221,9 @@ export class VmController {
         this.device,
         this.overrides,
       );
-      this.publish({
-        loading: false,
-        model: normalizeVm(this.binding, this.hass!.states),
-        binding: this.binding,
-      });
+      const model = normalizeVm(this.binding, this.hass!.states);
+      this.reconcileAction(model);
+      this.publish({ loading: false, model, binding: this.binding });
     } catch (error) {
       if (!current()) return;
       for (const unsubscribe of this.unsubscribe.splice(0)) unsubscribe();

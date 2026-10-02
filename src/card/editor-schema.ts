@@ -1,3 +1,4 @@
+import { entityRoles } from "../proxmox/official-adapter";
 import { defaultConfirmations, actionLabels } from "../infrastructure/model";
 import type { VmCardConfig } from "./config";
 
@@ -10,6 +11,9 @@ export interface FormField {
   flatten?: boolean;
   required?: boolean;
 }
+const defaultConfirmationIds = Object.entries(defaultConfirmations)
+  .filter(([, enabled]) => enabled)
+  .map(([id]) => id);
 const boolean = (name: string): FormField => ({
   name,
   selector: { boolean: {} },
@@ -108,18 +112,7 @@ export const overrideSchema: FormField[] = [
   {
     name: "entities",
     type: "grid",
-    schema: [
-      "cpu",
-      "memory",
-      "memoryTotal",
-      "memoryPercentage",
-      "disk",
-      "diskTotal",
-      "networkRx",
-      "networkTx",
-      "uptime",
-      "status",
-    ].map((name) => ({
+    schema: entityRoles.map((name) => ({
       name,
       selector: {
         entity: { filter: { domain: "sensor", integration: "proxmoxve" } },
@@ -189,11 +182,7 @@ export function formData(config: VmCardConfig): Record<string, unknown> {
           : (config.progress_bars?.[key as "cpu"] ?? true),
       ]),
     ),
-    confirm:
-      config.confirm ??
-      Object.keys(defaultConfirmations).filter(
-        (id) => defaultConfirmations[id as keyof typeof defaultConfirmations],
-      ),
+    confirm: config.confirm ?? defaultConfirmationIds,
   };
 }
 /** Merge only the section's fields, preserving unknown HA layout fields and untouched YAML. */
@@ -214,10 +203,8 @@ export function updateSection(
     } else if (
       name === "confirm" &&
       Array.isArray(value) &&
-      value.length === 4 &&
-      value.every(
-        (id) => defaultConfirmations[id as keyof typeof defaultConfirmations],
-      )
+      value.length === defaultConfirmationIds.length &&
+      defaultConfirmationIds.every((id) => value.includes(id))
     )
       delete next.confirm;
     else if (value === undefined || value === "") delete next[name];

@@ -322,3 +322,149 @@ it("retains errors through presentation changes and applies action visibility", 
   ).toContain("Permission denied");
   expect(card.shadowRoot!.querySelector("footer button")).toBeNull();
 });
+
+it.each(["success", "failure"])(
+  "finishes action feedback after registry refresh (%s)",
+  async (outcome) => {
+    const { hass, send } = setup();
+    let finish!: () => void;
+    let reject!: (error: Error) => void;
+    send.mockImplementation(
+      () =>
+        new Promise<void>((resolve, fail) => {
+          finish = resolve;
+          reject = fail;
+        }),
+    );
+    let refresh!: () => void;
+    hass.connection.subscribeEvents = async (callback) => {
+      refresh = callback;
+      return () => {};
+    };
+    const results: ActionResult[] = [];
+    const controller = new VmController(
+      () => {},
+      (result) => results.push(result),
+    );
+    controller.configure("vm");
+    controller.update(hass);
+    controller.connect();
+    await flush();
+    const pending = controller.press("shutdown", "vm");
+    refresh();
+    await flush();
+    await controller.press("shutdown", "vm");
+    expect(send).toHaveBeenCalledOnce();
+    if (outcome === "success") finish();
+    else reject(new Error("Denied"));
+    await pending;
+    expect(results.at(-1)?.pending).toBe(false);
+    if (outcome === "success")
+      expect(results.at(-1)?.message).toContain("accepted");
+    else expect(results.at(-1)?.error).toBe("Denied");
+    controller.disconnect();
+  },
+);
+it.each([false, true])(
+  "waits for the requested target through unavailable/unknown and registry reload (before response: %s)",
+  async (beforeResponse) => {
+    const { hass, send } = setup();
+    let finish!: () => void;
+    send.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const results: ActionResult[] = [];
+    const controller = new VmController(
+      () => {},
+      (result) => results.push(result),
+    );
+    controller.configure("vm");
+    controller.update(hass);
+    controller.connect();
+    await flush();
+    const pending = controller.press("shutdown", "vm");
+    if (beforeResponse) {
+      hass.states["sensor.vm_status"]!.state = "unavailable";
+      controller.update(hass);
+    }
+    finish();
+    await pending;
+    expect(results.at(-1)?.message).toContain("accepted");
+    for (const state of ["unavailable", "unknown", "suspended", "running"]) {
+      hass.states["sensor.vm_status"]!.state = state;
+      controller.update(hass);
+      expect(results.at(-1)?.message).toContain("accepted");
+    }
+    controller.retry();
+    await flush();
+    expect(results.at(-1)?.message).toContain("accepted");
+    hass.states["sensor.vm_status"]!.state = "stopped";
+    controller.retry();
+    await flush();
+    expect(results.at(-1)).toEqual({ pending: false });
+    controller.disconnect();
+  },
+);
+it("an old action response cannot unlock a new action after reconfiguration", async () => {
+  const { hass, send } = setup();
+  const finishes: (() => void)[] = [];
+  send.mockImplementation(
+    () => new Promise<void>((resolve) => finishes.push(resolve)),
+  );
+  const results: ActionResult[] = [];
+  const controller = new VmController(
+    () => {},
+    (result) => results.push(result),
+  );
+  controller.configure("vm");
+  controller.update(hass);
+  controller.connect();
+  await flush();
+  const first = controller.press("shutdown", "vm");
+  controller.configure("vm");
+  await flush();
+  const second = controller.press("reboot", "vm");
+  finishes[0]!();
+  await first;
+  expect(results.at(-1)?.message).toBe("Sending Reboot…");
+  expect(controller.canPress("reboot")).toBe(false);
+  finishes[1]!();
+  await second;
+  expect(results.at(-1)?.message).toContain("Reboot request accepted");
+  controller.disconnect();
+});
+it.each([
+  ["start", "stopped", "running"],
+  ["shutdown", "running", "stopped"],
+  ["force-stop", "running", "stopped"],
+  ["suspend", "running", "suspended"],
+  ["resume", "suspended", "running"],
+] as const)(
+  "clears %s feedback only when %s becomes %s",
+  async (action, initial, target) => {
+    const { hass } = setup();
+    hass.states["sensor.vm_status"]!.state = initial;
+    const results: ActionResult[] = [];
+    const controller = new VmController(
+      () => {},
+      (result) => results.push(result),
+    );
+    controller.configure("vm");
+    controller.update(hass);
+    controller.connect();
+    await flush();
+    await controller.press(action, "vm");
+    for (const state of ["unknown", "unavailable", initial]) {
+      hass.states["sensor.vm_status"]!.state = state;
+      controller.update(hass);
+      expect(results.at(-1)?.message).toContain("accepted");
+    }
+    hass.states["sensor.vm_status"]!.state = target;
+    controller.update(hass);
+    expect(results.at(-1)).toEqual({ pending: false });
+    controller.disconnect();
+  },
+);
