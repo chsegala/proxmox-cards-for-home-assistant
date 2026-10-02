@@ -144,3 +144,26 @@ describe("card presentation", () => {
     expect(element.shadowRoot!.textContent).toContain("Waiting for VM data");
   });
 });
+
+it("applies presentation-only title and metric/action visibility", async () => {
+  const element = await card();
+  const identity = element.model!.identity;
+  element.setConfig({
+    type: "custom:proxmox-vm-card",
+    device: "device",
+    title: "Title override",
+    metrics: { cpu: false, memory: false, disk: false, network: false },
+    actions: { reboot: false, "force-stop": false },
+  });
+  await element.updateComplete;
+  expect(element.shadowRoot!.querySelector("h2")?.textContent).toBe(
+    "Title override",
+  );
+  expect(element.model!.identity).toEqual(identity);
+  expect(element.shadowRoot!.querySelector(".metric")).toBeNull();
+  expect(element.shadowRoot!.querySelector(".network")).toBeNull();
+  expect(element.shadowRoot!.querySelector("details")).toBeNull();
+  expect(
+    element.shadowRoot!.querySelector("footer")?.textContent,
+  ).not.toContain("Reboot");
+});

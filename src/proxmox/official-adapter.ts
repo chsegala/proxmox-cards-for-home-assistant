@@ -42,6 +42,10 @@ function vmIdentifier(device: DeviceEntry): string {
   const ids = device.identifiers.filter(
     ([domain, id]) => domain === "proxmoxve" && /^.+_vm_\d+$/.test(id),
   );
+  if (device.model === "LXC" || device.model === "Container")
+    throw new Error(
+      "This device is a Proxmox container; the VM card supports VMs only.",
+    );
   if (device.model !== "VM" || ids.length !== 1)
     throw new Error(
       "Select a VM device from the official Proxmox VE integration.",

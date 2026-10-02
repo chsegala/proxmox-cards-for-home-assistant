@@ -1,3 +1,4 @@
+import { CardGestures, executeCardAction } from "./gestures";
 import type { HomeAssistant } from "../ha/types";
 import { VmController, type ActionResult } from "../ha/vm-controller";
 import { LitElement, css, html, nothing } from "lit";
@@ -8,7 +9,6 @@ import {
 } from "../infrastructure/format";
 import {
   actionLabels,
-  defaultConfirmations,
   visibleActions,
   type LifecycleActionId,
 } from "../infrastructure/model";
@@ -17,10 +17,20 @@ import {
   type ProxmoxVmModel,
   type VmMetricKey,
 } from "../proxmox/model";
-import { validateConfig, type VmCardConfig } from "./config";
+import {
+  requiresConfirmation,
+  validateConfig,
+  type VmCardConfig,
+} from "./config";
 
 /** Presentation boundary. HA adapters supply normalized data; no discovery lives here. */
 export class ProxmoxVmCard extends LitElement {
+  static getConfigElement(): HTMLElement {
+    return document.createElement("proxmox-vm-card-editor");
+  }
+  static getStubConfig() {
+    return { device: "" };
+  }
   static properties = {
     model: { attribute: false },
     loading: { type: Boolean },
@@ -32,6 +42,49 @@ export class ProxmoxVmCard extends LitElement {
   model: ProxmoxVmModel | undefined;
   loading = false;
   private config: VmCardConfig | undefined;
+  private hassValue?: HomeAssistant;
+  private gestureError: string | undefined;
+  private gestureEntity: string | undefined;
+  private readonly gestures = new CardGestures(
+    (gesture) => void this.runGesture(gesture),
+    (gesture) => {
+      const action =
+        this.config?.[gesture === "hold" ? "hold_action" : "double_tap_action"];
+      return Boolean(action && action.action !== "none");
+    },
+  );
+  private surfaceEvent(event: Event): boolean {
+    return !event
+      .composedPath()
+      .some(
+        (node) =>
+          node instanceof Element &&
+          node.matches(
+            "button, summary, details, dialog, a, input, select, textarea",
+          ),
+      );
+  }
+  private async runGesture(
+    gesture: "tap" | "hold" | "double_tap",
+  ): Promise<void> {
+    if (!this.usesHomeAssistant || !this.hassValue || this.confirmation) return;
+    const action = this.config?.[
+      gesture === "tap"
+        ? "tap_action"
+        : gesture === "hold"
+          ? "hold_action"
+          : "double_tap_action"
+    ] ?? { action: gesture === "tap" ? "more-info" : "none" };
+    try {
+      await executeCardAction(this, this.hassValue, action, this.gestureEntity);
+      this.gestureError = undefined;
+    } catch (error) {
+      this.gestureError =
+        error instanceof Error ? error.message : "Card action failed.";
+    }
+    this.requestUpdate();
+  }
+
   private error: string | undefined;
   private actionResult: ActionResult = { pending: false };
   private confirmation:
@@ -41,13 +94,14 @@ export class ProxmoxVmCard extends LitElement {
       this.confirmation ||
       !this.usesHomeAssistant ||
       !this.model ||
+      this.config?.actions?.[id] === false ||
       !this.live.canPress(id)
     )
       return;
     const deviceId = this.model.identity.deviceId;
     const overflow = this.shadowRoot?.querySelector("details");
     if (overflow) overflow.open = false;
-    if (defaultConfirmations[id]) {
+    if (requiresConfirmation(this.config, id)) {
       this.confirmation = { id, deviceId, name: this.model.identity.name };
       await this.updateComplete;
       this.shadowRoot?.querySelector("dialog")?.showModal();
@@ -68,6 +122,9 @@ export class ProxmoxVmCard extends LitElement {
   }
   private readonly live = new VmController(
     (result) => {
+      this.gestureEntity =
+        result.binding?.sensors.status?.entity_id ??
+        result.binding?.sensors.cpu?.entity_id;
       this.loading = result.loading;
       this.model = result.model;
       this.error = result.error;
@@ -82,6 +139,7 @@ export class ProxmoxVmCard extends LitElement {
     },
   );
   set hass(value: HomeAssistant) {
+    this.hassValue = value;
     if (this.usesHomeAssistant) this.live.update(value);
   }
   override connectedCallback(): void {
@@ -90,16 +148,25 @@ export class ProxmoxVmCard extends LitElement {
   }
   override disconnectedCallback(): void {
     this.cancelAction();
+    this.gestures.dispose();
     this.live.disconnect();
     super.disconnectedCallback();
   }
 
   setConfig(config: VmCardConfig): void {
-    validateConfig(config);
+    validateConfig(config, true);
     this.cancelAction();
+    this.gestures.dispose();
+    const discoveryChanged =
+      this.config?.device !== config.device ||
+      JSON.stringify(this.config?.entities) !== JSON.stringify(config.entities);
     this.config = { ...config };
-    if (this.usesHomeAssistant)
+    if (this.usesHomeAssistant && discoveryChanged) {
+      this.model = undefined;
+      this.error = undefined;
+      this.loading = false;
       this.live.configure(config.device, config.entities);
+    }
   }
   getCardSize(): number {
     return this.config?.layout === "compact"
@@ -112,6 +179,15 @@ export class ProxmoxVmCard extends LitElement {
   private metric(key: VmMetricKey, label: string) {
     const model = this.model;
     if (!model) return nothing;
+    if (
+      key !== "uptime" &&
+      this.config?.metrics?.[
+        key.startsWith("network")
+          ? "network"
+          : (key as "cpu" | "memory" | "disk")
+      ] === false
+    )
+      return nothing;
     const metric = metricFor(model, key);
     if (!metric) return nothing;
     const available =
@@ -152,6 +228,12 @@ export class ProxmoxVmCard extends LitElement {
 
   protected render() {
     const layout = this.config?.layout ?? "standard";
+    if (this.config && !this.config.device.trim())
+      return html`<ha-card
+        ><div class="placeholder" role="status">
+          Select a VM device from the official Proxmox VE integration.
+        </div></ha-card
+      >`;
     if (this.error)
       return html`<ha-card
         ><div class="placeholder" role="alert">
@@ -194,13 +276,45 @@ export class ProxmoxVmCard extends LitElement {
         : stateLabel;
     const showMetrics =
       model.state !== "stopped" && model.state !== "suspended";
-    const actions = visibleActions(model.state, model.actions);
+    const actions = visibleActions(model.state, model.actions).filter(
+      (action) => this.config?.actions?.[action.id] !== false,
+    );
     const routine = actions.filter((action) => action.id !== "force-stop");
     const forceStop = actions.find((action) => action.id === "force-stop");
     return html`<ha-card
       class=${`${layout} ${this.config?.state_accent === false ? "" : "accent"}`}
       data-state=${model.state}
+      @pointerdown=${(event: PointerEvent) => {
+        if (this.surfaceEvent(event)) this.gestures.down(event);
+      }}
+      @pointermove=${this.gestures.move}
+      @pointerup=${this.gestures.up}
+      @pointercancel=${this.gestures.cancel}
+      @pointerleave=${this.gestures.cancel}
+      @click=${(event: MouseEvent) => {
+        if (this.surfaceEvent(event)) this.gestures.click();
+      }}
+      @contextmenu=${(event: Event) => {
+        if (
+          this.surfaceEvent(event) &&
+          this.config?.hold_action &&
+          this.config.hold_action.action !== "none"
+        )
+          event.preventDefault();
+      }}
+      @keydown=${(event: KeyboardEvent) => {
+        if (
+          event.target === event.currentTarget &&
+          ["Enter", " "].includes(event.key)
+        ) {
+          event.preventDefault();
+          void this.runGesture("tap");
+        }
+      }}
+      tabindex="0"
+      aria-label=${this.config?.title ?? model.identity.name}
     >
+      ${this.gestureError ? html`<small role="alert">Last occurred error: ${this.gestureError}</small>` : nothing}
       <header>
         <div class="icon" aria-hidden="true">
           ${
@@ -228,7 +342,7 @@ export class ProxmoxVmCard extends LitElement {
           }
         </div>
         <div class="identity">
-          <h2>${model.identity.name}</h2>
+          <h2>${this.config?.title || model.identity.name}</h2>
           <p>${model.identity.node} · VM ${model.identity.vmId}</p>
         </div>
         <div
@@ -244,7 +358,12 @@ export class ProxmoxVmCard extends LitElement {
       </header>
       ${model.state === "unavailable" ? html`<p class="notice" role="status">VM unavailable. Current readings cannot be retrieved.</p>` : nothing}
       ${
-        showMetrics
+        showMetrics &&
+        ["cpu", "memory", "disk"].some(
+          (key) =>
+            this.config?.metrics?.[key as "cpu" | "memory" | "disk"] !==
+              false && metricFor(model, key as "cpu" | "memory" | "disk"),
+        )
           ? html`<div class="metrics">
               ${this.metric("cpu", "CPU")}${this.metric("memory", "Memory")}${this.metric("disk", "Disk")}
             </div>`
@@ -252,6 +371,7 @@ export class ProxmoxVmCard extends LitElement {
       }
       ${
         showMetrics &&
+        this.config?.metrics?.network !== false &&
         (metricFor(model, "networkRx") || metricFor(model, "networkTx"))
           ? html`<section class="network">
               <h3>Network <span>· cumulative totals</span></h3>
@@ -308,7 +428,7 @@ export class ProxmoxVmCard extends LitElement {
                 ${actionLabels[this.confirmation.id]} ${this.confirmation.name}?
               </h2>
               <p id="action-description">
-                ${this.confirmation.id === "force-stop" ? "This immediately stops the VM without a graceful shutdown and may cause data loss." : this.confirmation.id === "shutdown" ? "This requests a graceful shutdown of the VM." : this.confirmation.id === "reboot" ? "This restarts the VM and interrupts its services." : "This suspends the VM in memory and pauses its services."}
+                ${this.confirmation.id === "force-stop" ? "This immediately stops the VM without a graceful shutdown and may cause data loss." : this.confirmation.id === "shutdown" ? "This requests a graceful shutdown of the VM." : this.confirmation.id === "reboot" ? "This restarts the VM and interrupts its services." : this.confirmation.id === "suspend" ? "This suspends the VM in memory and pauses its services." : this.confirmation.id === "start" ? "This starts the VM." : "This resumes the suspended VM."}
               </p>
               <div class="confirmation-actions">
                 <button autofocus @click=${() => this.cancelAction()}>

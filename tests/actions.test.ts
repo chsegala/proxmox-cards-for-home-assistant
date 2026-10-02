@@ -257,3 +257,68 @@ it("hides normal footer feedback while always showing action errors", async () =
     card.shadowRoot!.querySelector('[role="alert"]')?.textContent,
   ).toContain("Permission denied");
 });
+
+it("allows configurable Start confirmation and disabling Reboot confirmation", async () => {
+  const { hass, send } = setup();
+  hass.states["sensor.vm_status"]!.state = "stopped";
+  const card = document.createElement("proxmox-vm-card") as ProxmoxVmCard;
+  card.setConfig({
+    type: "custom:proxmox-vm-card",
+    device: "vm",
+    confirm: ["start"],
+  });
+  card.hass = hass;
+  document.body.append(card);
+  await flush();
+  await card.updateComplete;
+  card.shadowRoot!.querySelector<HTMLButtonElement>("footer button")!.click();
+  await flush();
+  await card.updateComplete;
+  expect(card.shadowRoot!.querySelector("dialog")).not.toBeNull();
+  expect(send).not.toHaveBeenCalled();
+  card.shadowRoot!.querySelector<HTMLButtonElement>("dialog button")!.click();
+  hass.states["sensor.vm_status"]!.state = "running";
+  card.hass = hass;
+  card.setConfig({ type: "custom:proxmox-vm-card", device: "vm", confirm: [] });
+  await card.updateComplete;
+  [...card.shadowRoot!.querySelectorAll<HTMLButtonElement>("footer button")]
+    .find((button) => button.textContent?.trim() === "Reboot")!
+    .click();
+  await flush();
+  await card.updateComplete;
+  expect(send).toHaveBeenCalledWith(
+    expect.objectContaining({ target: { entity_id: "button.restart" } }),
+  );
+  expect(card.shadowRoot!.querySelector("dialog")).toBeNull();
+});
+it("retains errors through presentation changes and applies action visibility", async () => {
+  const { hass, send } = setup();
+  hass.states["sensor.vm_status"]!.state = "stopped";
+  const card = document.createElement("proxmox-vm-card") as ProxmoxVmCard;
+  card.setConfig({
+    type: "custom:proxmox-vm-card",
+    device: "vm",
+    show_action_status: false,
+  });
+  card.hass = hass;
+  document.body.append(card);
+  await flush();
+  await card.updateComplete;
+  send.mockRejectedValue(new Error("Permission denied"));
+  card.shadowRoot!.querySelector<HTMLButtonElement>("footer button")!.click();
+  await flush();
+  await card.updateComplete;
+  card.setConfig({
+    type: "custom:proxmox-vm-card",
+    device: "vm",
+    show_action_status: false,
+    layout: "compact",
+    actions: { start: false },
+  });
+  card.hass = hass;
+  await card.updateComplete;
+  expect(
+    card.shadowRoot!.querySelector('[role="alert"]')?.textContent,
+  ).toContain("Permission denied");
+  expect(card.shadowRoot!.querySelector("footer button")).toBeNull();
+});

@@ -18,8 +18,10 @@ class ProxmoxVmTestCard extends ProxmoxVmCard {
     if (name !== "Loading" && !Object.hasOwn(fixtures, name)) {
       throw new Error(`Unknown test fixture: ${name}`);
     }
+    const presentation = { ...config };
+    delete presentation.fixture;
     super.setConfig({
-      ...config,
+      ...presentation,
       type: "custom:proxmox-vm-card",
       device: "test-fixture",
     });

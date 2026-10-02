@@ -7,10 +7,22 @@ export interface HaConnection {
 }
 export interface HomeAssistant {
   states: Record<string, HaState>;
+  user?: { is_admin: boolean; id?: string };
+  callService?(
+    domain: string,
+    service: string,
+    data?: Record<string, unknown>,
+    target?: Record<string, unknown>,
+  ): Promise<unknown>;
   connection: HaConnection;
   callWS<T>(
     message:
       | { type: string }
+      | {
+          type: "config/entity_registry/update";
+          entity_id: string;
+          disabled_by: null;
+        }
       | {
           type: "call_service";
           domain: "button";

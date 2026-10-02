@@ -19,6 +19,7 @@ export interface ActionResult {
 export interface VmResult {
   loading: boolean;
   model?: ProxmoxVmModel;
+  binding?: VmBinding;
   error?: string;
 }
 /** Owns registry IO; runtime states are supplied by HA on every hass update. */
@@ -158,7 +159,7 @@ export class VmController {
         this.awaitingState = undefined;
         this.publishAction({ pending: false });
       }
-      this.publish({ loading: false, model });
+      this.publish({ loading: false, model, binding: this.binding });
     }
   }
   retry(): void {
@@ -210,6 +211,7 @@ export class VmController {
       this.publish({
         loading: false,
         model: normalizeVm(this.binding, this.hass!.states),
+        binding: this.binding,
       });
     } catch (error) {
       if (!current()) return;

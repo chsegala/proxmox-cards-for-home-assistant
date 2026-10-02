@@ -2,7 +2,7 @@
 
 A polished set of Lit/TypeScript infrastructure cards. The first component is `custom:proxmox-vm-card`.
 
-**Early development:** live readings now come from the official Home Assistant Proxmox VE integration through device and entity registries. Lifecycle buttons invoke official integration button entities through HA. Shutdown, reboot, suspend, and Force Stop require confirmation; Start and Resume execute directly. This is not a release or a HACS installation guide.
+**Early development:** live readings now come from the official Home Assistant Proxmox VE integration through device and entity registries. Lifecycle buttons invoke official integration button entities through HA. By default, shutdown, reboot, suspend, and Force Stop require confirmation; Start and Resume execute directly. The visual editor can change this policy. This is not a release or a HACS installation guide.
 
 ## Development
 
@@ -36,7 +36,35 @@ Build outputs **`dist/proxmox-vm-card.js`**, a single self-contained ES module i
 - `dev/`: fixtures and standalone harness; never included in the production module.
 - `tests/`: formatter, capability/action policy, configuration, and DOM presentation tests.
 
-The renderer exposes a normalized `model` property as its internal adapter boundary. Fixture injection belongs exclusively to the harness; there is no fixture/demo YAML API. The official integration adapter resolves the configured VM device through registry metadata and exact semantic keys, with optional explicit sensor overrides, and feeds this boundary. It never matches friendly names or enables disabled entities.
+The renderer exposes a normalized `model` property as its internal adapter boundary. Fixture injection belongs exclusively to the harness; there is no fixture/demo YAML API. The official integration adapter resolves the configured VM device through registry metadata and exact semantic keys, with optional explicit sensor overrides, and feeds this boundary. It never matches friendly names. The editor enables required disabled entities only after an explicit administrator click.
+
+### Visual configuration
+
+In dashboard edit mode, choose **Add card → Proxmox VM Card**, select an official Proxmox VE VM device, review the preview, and save. No YAML or sensor IDs are required. The initial empty card asks you to select a VM; it never chooses one automatically. The adapter rejects nodes, containers, templates, deleted devices, and unrelated integrations.
+
+The editor uses Home Assistant forms/selectors inside a small Lit wrapper. General controls include device, title, layout, icon, and state accent. Metrics controls include visibility of CPU/memory/disk/network, memory/disk percentages, and independent progress bars. Actions controls include visibility of all six lifecycle actions and ordinary footer feedback. Errors always remain visible. Confirmations are independent of visibility and availability; Force Stop stays in overflow.
+
+Under **Advanced**, discovery diagnostics distinguish available, unavailable, disabled, missing, and overridden capabilities and show their entity IDs. Optional sensor overrides retain the same-device, sensor-domain, official-integration checks; clearing an override restores automatic discovery.
+
+When a visible metric needs disabled entities, the editor lists exactly which entities are needed. An administrator can explicitly enable that feature through Home Assistant's entity-registry WebSocket API. Only required entities are changed, including the smallest usable memory dependency path. Partial failures and authorization errors are shown; non-administrators receive instructions to use the VM device page or ask an administrator. Discovery refreshes after enabling. During an integration reload, unavailable placeholders are displayed until actual readings return.
+
+New optional configuration fields (omission preserves existing defaults):
+
+```yaml
+title: My VM
+metrics:
+  cpu: false
+  network: false
+actions:
+  reboot: false
+confirm:
+  - shutdown
+  - reboot
+  - force-stop
+  - suspend
+```
+
+All metrics and actions default visible, subject to discovered capabilities and VM state. `confirm: []` disables all confirmations; add `start` or `resume` to require those confirmations. Title affects presentation only. Existing fields and boolean `progress_bars` configurations remain supported; the editor omits default values where practical. Unknown options, invalid map keys/values, and malformed confirmation lists are rejected.
 
 Minimal live YAML:
 
@@ -53,7 +81,7 @@ Network values are decimal SI cumulative totals, never rates. Running status dis
 
 ## Deferred
 
-Configurable confirmations, visual editor and authorized entity enabling, HACS/release packaging. No direct Proxmox communication, cloud calls, or telemetry. 
+HACS/release packaging, licensing, additional cards. No direct Proxmox communication, cloud calls, or telemetry. 
 
 ## Devcontainer and Kubernetes bastion
 
@@ -101,7 +129,7 @@ entities:
   cpu: sensor.your_explicit_cpu_entity
 ```
 
-The integration's `pause` button represents RAM suspension; `hibernate` is not mapped to Suspend. These bindings currently describe capability only. The live controller revalidates device, VM state, and button availability before calling HA’s `button.press` service. It blocks duplicate clicks, surfaces permission failures, and waits for HA state updates rather than optimistically changing VM status.
+The integration's `pause` button represents RAM suspension; `hibernate` is not mapped to Suspend. The live controller revalidates device, VM state, and button availability before calling HA’s `button.press` service. It blocks duplicate clicks, surfaces permission failures, and waits for HA state updates rather than optimistically changing VM status.
 
 ### Local HA paused-status fix
 
@@ -114,3 +142,19 @@ Run its isolated logic tests with `python3 tools/test_ha_proxmox_paused_status.p
 Accepted lifecycle request feedback clears when HA reports a different VM status or a reboot resets uptime, including when that update arrives before the service response. Other metric updates retain the waiting message.
 
 Set `show_action_status: false` to hide the footer's normal lifecycle and request feedback (default: `true`). Action errors always remain visible, labeled “Last occurred error,” regardless of this setting.
+
+### Card tap, hold and double tap
+
+The visual editor's **Card interactions** section configures `tap_action`, `hold_action`, and `double_tap_action` using Home Assistant action selectors. Supported actions are More info, Navigate, Open URL, Perform action (including legacy call-service), Toggle, Fire DOM event, and None. More info defaults to the VM status sensor (CPU if status is absent); select an entity to override it. Tap defaults to More info; hold and double tap default to None. Lifecycle buttons and overflow never trigger these surface gestures. Scrolling cancels a hold, and a double tap suppresses the single tap. Enter/Space on the focused card executes the tap action. Gesture service failures remain visible as errors.
+
+```yaml
+tap_action:
+  action: more-info
+hold_action:
+  action: navigate
+  navigation_path: /proxmox-cards-test/live
+double_tap_action:
+  action: none
+```
+
+Gesture confirmations are independent of lifecycle confirmations. Configuring Perform action can invoke arbitrary HA services with your current HA permissions.
