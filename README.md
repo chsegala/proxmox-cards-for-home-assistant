@@ -18,7 +18,25 @@ Local-first: Home Assistant remains the backend. The card has no cloud backend o
 
 ## Screenshots
 
-Screenshots belong in [docs/images](docs/images/README.md). The fixture harness provides representative running, stopped, suspended, unavailable and loading views. Deployment screenshots must be reviewed for private names, identifiers and URLs before committing.
+Actual captures from the local fixture harness, using fictional VM/node/device identifiers. Lifecycle controls are inert; no deployment data appears in these images.
+
+**Standard · light theme**
+
+![Standard layout showing running, stopped, suspended and unavailable fixture VMs](docs/images/standard-light.jpg)
+
+<details>
+<summary>Compact layout · dark theme</summary>
+
+![Compact layout with fictional VM metrics in dark theme](docs/images/compact-dark.jpg)
+
+</details>
+
+<details>
+<summary>Detailed layout · light theme</summary>
+
+![Detailed layout with fictional device IDs and VM states](docs/images/detailed-light.jpg)
+
+</details>
 
 ## Requirements
 

@@ -1,5 +1,5 @@
 import { html, render } from "lit";
-import "../src/index";
+import "./ha-preview";
 import { fixtures } from "./fixtures";
 import type { Layout } from "../src/card/config";
 const style = document.createElement("style");
@@ -51,25 +51,26 @@ function update() {
         </button>
       </nav>
       <div class="grid">
-        ${Object.entries(fixtures).map(
-          ([name, model]) =>
+        ${Object.keys(fixtures).map(
+          (name) =>
             html`<section>
               <p class="caption">${name}</p>
-              <proxmox-vm-card .model=${model}></proxmox-vm-card>
+              <proxmox-vm-test-card data-fixture=${name}></proxmox-vm-test-card>
             </section>`,
         )}
         <section>
           <p class="caption">Loading</p>
-          <proxmox-vm-card .loading=${true}></proxmox-vm-card>
+          <proxmox-vm-test-card data-fixture="Loading"></proxmox-vm-test-card>
         </section>
       </div>
     </main>`,
     document.body,
   );
-  document.querySelectorAll("proxmox-vm-card").forEach((card) =>
+  document.querySelectorAll("proxmox-vm-test-card").forEach((card) =>
     (card as import("../src/card/proxmox-vm-card").ProxmoxVmCard).setConfig({
       type: "custom:proxmox-vm-card",
       device: "fixture",
+      ...{ fixture: card.getAttribute("data-fixture") ?? "Running healthy" },
       layout,
       progress_bars: bars,
       memory_percentage: percentages,
