@@ -1,3 +1,4 @@
+import { bindHaGestures } from "./ha-gestures";
 import { CardGestures, executeCardAction } from "./gestures";
 import type { HomeAssistant } from "../ha/types";
 import { VmController, type ActionResult } from "../ha/vm-controller";
@@ -53,9 +54,28 @@ export class ProxmoxVmCard extends LitElement {
       return Boolean(action && action.action !== "none");
     },
   );
+  private nativeGestures = false;
+  protected override updated(): void {
+    const surface = this.shadowRoot?.querySelector("ha-card");
+    if (surface instanceof HTMLElement)
+      this.nativeGestures = bindHaGestures(surface, {
+        hasHold: Boolean(
+          this.config?.hold_action && this.config.hold_action.action !== "none",
+        ),
+        hasDoubleClick: Boolean(
+          this.config?.double_tap_action &&
+          this.config.double_tap_action.action !== "none",
+        ),
+      });
+  }
+  private guardNativeGesture(event: Event): void {
+    if (this.nativeGestures && !this.surfaceEvent(event))
+      event.stopImmediatePropagation();
+  }
   private surfaceEvent(event: Event): boolean {
-    return !event
-      .composedPath()
+    const path = event.composedPath();
+    return !path
+      .slice(0, path.indexOf(this))
       .some(
         (node) =>
           node instanceof Element &&
@@ -284,15 +304,26 @@ export class ProxmoxVmCard extends LitElement {
     return html`<ha-card
       class=${`${layout} ${this.config?.state_accent === false ? "" : "accent"}`}
       data-state=${model.state}
+      @mousedown=${this.guardNativeGesture}
+      @touchstart=${this.guardNativeGesture}
+      @action=${(event: CustomEvent<{ action: string }>) => {
+        if (!this.nativeGestures || !this.surfaceEvent(event)) return;
+        const action = event.detail.action;
+        if (action === "tap" || action === "hold" || action === "double_tap")
+          void this.runGesture(action);
+      }}
       @pointerdown=${(event: PointerEvent) => {
-        if (this.surfaceEvent(event)) this.gestures.down(event);
+        if (!this.nativeGestures && this.surfaceEvent(event))
+          this.gestures.down(event);
       }}
       @pointermove=${this.gestures.move}
       @pointerup=${this.gestures.up}
       @pointercancel=${this.gestures.cancel}
       @pointerleave=${this.gestures.cancel}
       @click=${(event: MouseEvent) => {
-        if (this.surfaceEvent(event)) this.gestures.click();
+        this.guardNativeGesture(event);
+        if (!this.nativeGestures && this.surfaceEvent(event))
+          this.gestures.click();
       }}
       @contextmenu=${(event: Event) => {
         if (
@@ -303,7 +334,9 @@ export class ProxmoxVmCard extends LitElement {
           event.preventDefault();
       }}
       @keydown=${(event: KeyboardEvent) => {
+        this.guardNativeGesture(event);
         if (
+          !this.nativeGestures &&
           event.target === event.currentTarget &&
           ["Enter", " "].includes(event.key)
         ) {

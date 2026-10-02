@@ -130,7 +130,9 @@ it("card surface clicks run actions but lifecycle buttons and overflow never bub
     connection: { subscribeEvents: () => new Promise(() => {}) },
     states: {},
   } as HomeAssistant;
-  document.body.append(card);
+  const editorDialog = document.createElement("dialog");
+  document.body.append(editorDialog);
+  editorDialog.append(card);
   card.loading = false;
   card.model = fixtures["Running healthy"];
   await card.updateComplete;
@@ -147,4 +149,73 @@ it("card surface clicks run actions but lifecycle buttons and overflow never bub
     .shadowRoot!.querySelector("summary")!
     .dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
   expect(fired).toHaveBeenCalledOnce();
+});
+it("uses HA's registered action-handler without duplicate fallback gestures and isolates controls", async () => {
+  const registered = customElements.get.bind(customElements);
+  vi.spyOn(customElements, "get").mockImplementation((name) =>
+    name === "action-handler" ? HTMLElement : registered(name),
+  );
+  const bound = new WeakSet<HTMLElement>();
+  const bind = vi.fn((element: HTMLElement) => {
+    if (bound.has(element)) return;
+    bound.add(element);
+    element.addEventListener("click", (event) =>
+      event.target!.dispatchEvent(
+        new CustomEvent("action", {
+          detail: { action: "tap" },
+          bubbles: true,
+          composed: true,
+        }),
+      ),
+    );
+  });
+  const handler = Object.assign(document.createElement("action-handler"), {
+    bind,
+  });
+  document.body.append(handler);
+  const card = document.createElement("proxmox-vm-card") as ProxmoxVmCard;
+  card.setConfig({
+    type: "custom:proxmox-vm-card",
+    device: "device",
+    tap_action: { action: "fire-dom-event" },
+    hold_action: { action: "more-info" },
+  });
+  card.hass = {
+    callWS: () => new Promise(() => {}),
+    connection: { subscribeEvents: () => new Promise(() => {}) },
+    states: {},
+  } as HomeAssistant;
+  const editor = document.createElement("dialog");
+  document.body.append(editor);
+  editor.append(card);
+  card.loading = false;
+  card.model = fixtures["Running healthy"];
+  await card.updateComplete;
+  expect(bind).toHaveBeenCalledWith(card.shadowRoot!.querySelector("ha-card"), {
+    hasHold: true,
+    hasDoubleClick: false,
+  });
+  const fired = vi.fn();
+  card.addEventListener("ll-custom", fired);
+  const click = (selector: string) =>
+    card
+      .shadowRoot!.querySelector(selector)!
+      .dispatchEvent(
+        new MouseEvent("click", { bubbles: true, composed: true }),
+      );
+  click("header");
+  expect(fired).toHaveBeenCalledOnce();
+  click("button");
+  click("summary");
+  expect(fired).toHaveBeenCalledOnce();
+  card.setConfig({
+    type: "custom:proxmox-vm-card",
+    device: "device",
+    double_tap_action: { action: "more-info" },
+  });
+  await card.updateComplete;
+  expect(bind).toHaveBeenLastCalledWith(
+    card.shadowRoot!.querySelector("ha-card"),
+    { hasHold: false, hasDoubleClick: true },
+  );
 });
