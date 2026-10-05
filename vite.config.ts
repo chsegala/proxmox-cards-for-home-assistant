@@ -5,6 +5,7 @@ const licenseNotices = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
   .map((file) => readFileSync(new URL(file, import.meta.url), "utf8"))
   .join("\n\n");
 export default defineConfig({
+  esbuild: { legalComments: "inline" },
   build: {
     lib: {
       entry: "src/index.ts",

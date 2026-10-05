@@ -31,6 +31,8 @@ jobs:
       - run: npm run format:check
       - run: python3 tools/test_ha_proxmox_paused_status.py
       - run: npm run build
+      - name: Verify embedded license notices
+        run: node --input-type=module -e 'import fs from "node:fs"; const bundle = fs.readFileSync("dist/proxmox-vm-card.js", "utf8"); for (const file of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) if (!bundle.includes(fs.readFileSync(file, "utf8"))) throw new Error(`Missing ${file} in bundle`);'
       - run: npm run build:ha-preview
       - name: Check release version
         if: startsWith(github.ref, 'refs/tags/')
