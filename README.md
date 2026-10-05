@@ -4,7 +4,7 @@ A Home Assistant card for monitoring and controlling QEMU VMs through the **offi
 
 Local-first: Home Assistant remains the backend. The card has no cloud backend or telemetry and never connects directly to Proxmox.
 
-**Status:** the VM card's monitoring, lifecycle controls and visual editor are implemented. This repository is in development; HACS packaging and public releases are not available yet. Try it through the fixture harness or a separate HA test dashboard before using it for important VMs.
+**Status:** the VM card's monitoring, lifecycle controls and visual editor are implemented. Available through HACS as a custom Dashboard repository. This is an early release; try it on a test dashboard before using it for important VMs.
 
 ## Features
 
@@ -46,9 +46,37 @@ Actual captures from the local fixture harness, using fictional VM/node/device i
 
 Some bundled Home Assistant versions may report suspended QEMU VMs as running. The optional local workaround in `tools/ha-proxmox-paused-status.py` changes the integration and requires review after Home Assistant upgrades; it is not installed by the card.
 
+## Installation
+
+### HACS
+
+1. Open **HACS → ⋮ → Custom repositories**.
+2. Add `https://github.com/chsegala/proxmox-cards-for-home-assistant` and choose **Dashboard**.
+3. Find **Proxmox Cards for Home Assistant** and download the release.
+4. Reload the Home Assistant browser, then add **Proxmox VM Card** to a dashboard.
+
+If the card does not appear, check **Settings → Dashboards → ⋮ → Resources** for `/hacsfiles/proxmox-cards-for-home-assistant/proxmox-vm-card.js` with type **JavaScript module**. The Resources menu may require Advanced mode in your profile. YAML-managed dashboards may need the resource configured in YAML.
+
+Install the official Proxmox VE integration separately under **Settings → Devices & services**. HACS installs the frontend card only.
+
+### Manual installation
+
+Download `proxmox-vm-card.js` from [Releases](https://github.com/chsegala/proxmox-cards-for-home-assistant/releases), copy it to `/config/www/proxmox-vm-card/`, and add `/local/proxmox-vm-card/proxmox-vm-card.js` as a JavaScript module resource.
+
+Use one resource registration for this card. Remove an older manual registration when switching to HACS to avoid loading two versions.
+
+### Updates and troubleshooting
+
+Update through HACS and reload the browser. If old UI persists, hard-refresh the page and check for duplicate resource registrations. To roll back, use HACS's **Redownload** dialog to select an earlier release.
+
+- **Custom element doesn't exist:** verify the resource path and module type, then reload the browser.
+- **No supported VM found:** confirm that a QEMU VM belongs to the official `proxmoxve` integration; other integrations and LXC devices are unsupported.
+- **Missing readings:** use the card editor to review disabled metric entities. Enabling them requires an administrator.
+- **Suspended VM appears running:** this can be an integration limitation; see the note under Requirements.
+
 ## Configuration
 
-Once the development resource is registered, choose **Add card → Proxmox VM Card** in dashboard edit mode. Select a VM and configure it visually; normal setup requires no YAML or sensor IDs.
+Once the card resource is installed, choose **Add card → Proxmox VM Card** in dashboard edit mode. Select a VM and configure it visually; normal setup requires no YAML or sensor IDs.
 
 Minimal YAML:
 
@@ -140,7 +168,7 @@ See [CONTRIBUTING](CONTRIBUTING.md) and [SECURITY](SECURITY.md).
 
 Implemented: QEMU VM monitoring/discovery, lifecycle controls, configuration/onboarding, diagnostics and surface gestures.
 
-Deferred: HACS/public releases, Node/LXC/Storage/Cluster cards, history, throughput, backups and snapshots. No dates or commitment to future features are implied.
+Deferred: Node/LXC/Storage/Cluster cards, history, throughput, backups and snapshots. No dates or commitment to future features are implied.
 
 ## License and independence
 

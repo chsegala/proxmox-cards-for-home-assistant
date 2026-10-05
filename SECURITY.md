@@ -6,6 +6,6 @@ The card uses the existing HA session/integration and must never require additio
 
 Do not disclose vulnerabilities publicly before coordinating with the maintainer. Include the affected version/commit, HA/browser versions, reproduction steps and potential impact. Share only sanitized data; never send tokens, passwords, session cookies or private keys.
 
-Do not file vulnerability details in public issues. Ask the maintainer for a private reporting channel before sharing sensitive details.
+Report vulnerabilities privately through [GitHub Security → Report a vulnerability](https://github.com/chsegala/proxmox-cards-for-home-assistant/security/advisories/new). Do not post vulnerability details in public issues.
 
 This project is in development and has no supported-release security maintenance policy yet. Repository review is not a penetration test or a guarantee that the software is vulnerability-free.
