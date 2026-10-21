@@ -4,7 +4,7 @@ A Home Assistant card for monitoring and controlling QEMU VMs through the **offi
 
 Local-first: Home Assistant remains the backend. The card has no cloud backend or telemetry and never connects directly to Proxmox.
 
-**Status:** the VM card's monitoring, lifecycle controls and visual editor are implemented. Available through HACS as a custom Dashboard repository. This is an early release; try it on a test dashboard before using it for important VMs.
+**Status:** the VM card's monitoring, lifecycle controls and visual editor are implemented. Available in the HACS default catalog. This is an early release; try it on a test dashboard before using it for important VMs.
 
 ## Features
 
@@ -50,10 +50,11 @@ Some bundled Home Assistant versions may report suspended QEMU VMs as running. T
 
 ### HACS
 
-1. Open **HACS → ⋮ → Custom repositories**.
-2. Add `https://github.com/chsegala/proxmox-cards-for-home-assistant` and choose **Dashboard**.
-3. Find **Proxmox Cards for Home Assistant** and download the release.
-4. Reload the Home Assistant browser, then add **Proxmox VM Card** to a dashboard.
+1. Open **HACS** and search for **Proxmox Cards for Home Assistant**.
+2. Open the result and download the release.
+3. Reload the Home Assistant browser, then add **Proxmox VM Card** to a dashboard.
+
+If your HACS catalog has not refreshed yet, you can add `https://github.com/chsegala/proxmox-cards-for-home-assistant` under **HACS → ⋮ → Custom repositories**, choosing **Dashboard**, then search again.
 
 If the card does not appear, check **Settings → Dashboards → ⋮ → Resources** for `/hacsfiles/proxmox-cards-for-home-assistant/proxmox-vm-card.js` with type **JavaScript module**. The Resources menu may require Advanced mode in your profile. YAML-managed dashboards may need the resource configured in YAML.
 
